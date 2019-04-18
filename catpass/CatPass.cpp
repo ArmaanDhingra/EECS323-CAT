@@ -25,7 +25,7 @@ namespace {
     // The LLVM IR of the input functions is ready and it can be analyzed and/or transformed
     bool runOnFunction (Function &F) override {
 
-
+      
       int addCount = 0;
       int setCount = 0;
       int newCount = 0;
