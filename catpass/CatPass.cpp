@@ -123,20 +123,9 @@ namespace {
                         errs() << "\n " << *(*it);
                     }
                     errs() << "\n}\n**************************************\n\n\n\n";
-
                 }
             }
-            
-            // for (std::map<Value*,std::set<Instruction*>>::iterator it=VARAPPEARANCES.begin(); it!=VARAPPEARANCES.end(); ++it){
-            //   errs() << "VARIABLE: " << (it->first) << "\n";
-            //   errs() << "Appearances: { ";
-            //   for (std::set<Instruction*>::iterator nico=it->second.begin(); nico!=it->second.end(); ++nico){
-            //      errs() << *(*nico) << ", ";
-            //   }
-            //   errs() << "}\n\n";
-            // }
             return false;
-
         }
 
         // We don't modify the program, so we preserve all analyses.
