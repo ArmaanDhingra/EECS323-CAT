@@ -5,6 +5,7 @@
 #include "llvm/Transforms/IPO/PassManagerBuilder.h"
 #include "llvm/IR/Module.h"
 #include "llvm/IR/Instructions.h"
+#include <set>
 
 using namespace llvm;
 
@@ -31,11 +32,18 @@ namespace {
       int newCount = 0;
       int getCount = 0;
       int subCount = 0;
+      std::string currKill = "";
 
       std::string funName = F.getName();
-
+      errs()<<"START FUNCTION: " << funName << "\n";
       for (auto &bb : F){
+        std::set<CallInst*> VARS;
+        // std::map<int,std::vector<std::string>> OUT;
+        // std::map<int,int(*)[3]> first;
+        errs () << bb.size() << "\n";
         for (auto &i : bb){
+          errs()<<"INSTRUCTION: " << i << "\n";
+          // errs() << "***************** GEN\n{\n" << currKill <<"\n}\n**************************************\n***************** KILL\n{\n"<<currKill<<"\n}\n**************************************\n\n\n\n";
           if (!isa<CallInst>(i)){
             continue;
           }
@@ -44,34 +52,26 @@ namespace {
           Function *callee = callInst->getCalledFunction();
           llvm::StringRef calleeName = callee->getName();
 
-          if (calleeName == "CAT_add"){
-            addCount++;
-          } else if (calleeName == "CAT_set"){
-            setCount++;
-          } else if (calleeName == "CAT_new"){
-            newCount++;
-          } else if (calleeName == "CAT_get"){
-            getCount++;
-          } else if (calleeName == "CAT_sub"){
-            subCount++;
-          }
-        }
-      }
+          // if (calleeName == "CAT_add"){
+          //   addCount++;
+          //   errs() << "CAT_add ARG OPERAND: " << callInst->getArgOperand(0) << "\n";
+          //   // errs() << callInst->getArgOperand(1) << "\n";
+          //   // errs() << callInst->getArgOperand(2) << "\n";
 
-      if (addCount){
-        errs()<<"H1: \""<<funName<<"\": CAT_add: " << addCount<<"\n";
-      }
-      if (subCount){
-        errs()<<"H1: \""<<funName<<"\": CAT_sub: " << subCount<<"\n";
-      }
-      if (newCount){
-        errs()<<"H1: \""<<funName<<"\": CAT_new: " << newCount<<"\n";
-      }
-      if (getCount){
-        errs()<<"H1: \""<<funName<<"\": CAT_get: " << getCount<<"\n";
-      }
-      if (setCount){
-        errs()<<"H1: \""<<funName<<"\": CAT_set: " << setCount<<"\n";
+
+          // } else if (calleeName == "CAT_set"){
+          //   setCount++;
+          //   errs() << "CAT_set ARG OPERAND: " << callInst->getArgOperand(0) << "\n";
+          // } else if (calleeName == "CAT_new"){
+          //   errs() << "CAT_new ARG SET: " << callInst << " | " << i << "\n";
+          //   newCount++;
+          // } else if (calleeName == "CAT_get"){
+          //   getCount++;
+          // } else if (calleeName == "CAT_sub"){
+          //   subCount++;
+          //   errs() << "CAT_sub ARG OPERAND: " << callInst->getArgOperand(0) << "\n";
+          // }
+        }
       }
       
       return false;
