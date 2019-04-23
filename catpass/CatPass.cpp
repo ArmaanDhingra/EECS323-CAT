@@ -6,6 +6,7 @@
 #include "llvm/IR/Module.h"
 #include "llvm/IR/Instructions.h"
 #include <set>
+#include <map>
 
 using namespace llvm;
 
@@ -36,14 +37,11 @@ namespace {
 
       std::string funName = F.getName();
       errs()<<"START FUNCTION: " << funName << "\n";
+      std::map<Value*,std::set<Instruction*>> VARAPPEARANCES;
+
       for (auto &bb : F){
-        std::set<CallInst*> VARS;
-        // std::map<int,std::vector<std::string>> OUT;
-        // std::map<int,int(*)[3]> first;
-        errs () << bb.size() << "\n";
         for (auto &i : bb){
-          errs()<<"INSTRUCTION: " << i << "\n";
-          // errs() << "***************** GEN\n{\n" << currKill <<"\n}\n**************************************\n***************** KILL\n{\n"<<currKill<<"\n}\n**************************************\n\n\n\n";
+          
           if (!isa<CallInst>(i)){
             continue;
           }
@@ -52,28 +50,93 @@ namespace {
           Function *callee = callInst->getCalledFunction();
           llvm::StringRef calleeName = callee->getName();
 
-          // if (calleeName == "CAT_add"){
-          //   addCount++;
-          //   errs() << "CAT_add ARG OPERAND: " << callInst->getArgOperand(0) << "\n";
-          //   // errs() << callInst->getArgOperand(1) << "\n";
-          //   // errs() << callInst->getArgOperand(2) << "\n";
+          if (calleeName == "CAT_add"){
+            VARAPPEARANCES[callInst->getArgOperand(0)].insert(&i);
+          } else if (calleeName == "CAT_set"){
+            VARAPPEARANCES[callInst->getArgOperand(0)].insert(&i);
+          } else if (calleeName == "CAT_new"){
+            VARAPPEARANCES[callInst].insert(&i);
+          } else if (calleeName == "CAT_get"){
+            getCount++;
+          } else if (calleeName == "CAT_sub"){
+            VARAPPEARANCES[callInst->getArgOperand(0)].insert(&i);
+          }
+        }
+      }
 
+      // Loop through again to generate GEN and KILL sets
+      // GEN[INSTRUCTION*]->set{INSTRUCTION*}
+      // KILL[INSTRUCTION*]->set{INSTRUCTION*}
+      std::map<Instruction*, std::set<Instruction*>> GEN;
+      std::map<Instruction*, std::set<Instruction*>> KILL;
+      for (auto &bb : F){
+        for (auto &i : bb){
+          if (!isa<CallInst>(i)){
+            GEN[&i] = {};
+            KILL[&i] = {}:
 
-          // } else if (calleeName == "CAT_set"){
-          //   setCount++;
-          //   errs() << "CAT_set ARG OPERAND: " << callInst->getArgOperand(0) << "\n";
-          // } else if (calleeName == "CAT_new"){
-          //   errs() << "CAT_new ARG SET: " << callInst << " | " << i << "\n";
-          //   newCount++;
-          // } else if (calleeName == "CAT_get"){
-          //   getCount++;
-          // } else if (calleeName == "CAT_sub"){
-          //   subCount++;
-          //   errs() << "CAT_sub ARG OPERAND: " << callInst->getArgOperand(0) << "\n";
-          // }
+            errs()<<"INSTRUCTION: " << i << "\n";
+            errs() << "***************** GEN\n{\n";
+            for (std::set<Instruction*>::iterator it=GEN[&i].begin(); it!=GEN[&i].end(); ++it){
+              errs() << *(*it) << "\n"; 
+              }
+            errs() << "\n}\n**************************************\n***************** KILL\n{\n";
+            for (std::set<Instruction*>::iterator it=KILL[&i].begin(); it!=KILL[&i].end(); ++it){
+              errs() << *(*it) << "\n"; 
+              }
+            errs() << "\n}\n**************************************\n\n\n\n";
+
+            continue;
+          }
+
+          CallInst *callInst = &cast<CallInst>(i);
+          Function *callee = callInst->getCalledFunction();
+          llvm::StringRef calleeName = callee->getName();
+
+          if (calleeName == "CAT_add"){
+            GEN[&i] = {&i}
+            KILL[&i] = VARAPPEARANCES[callInst->getArgOperand(0)];
+            KILL[&i].erase(&i);
+          } else if (calleeName == "CAT_set"){
+            GEN[&i] = {&i}
+            KILL[&i] = VARAPPEARANCES[callInst->getArgOperand(0)];
+            KILL[&i].erase(&i);
+          } else if (calleeName == "CAT_new"){
+            GEN[&i] = {&i}
+            KILL[&i] = VARAPPEARANCES[callInst];
+            KILL[&i].erase(&i);
+          } else if (calleeName == "CAT_get"){
+            GEN[&i] = {};
+            KILL[&i] = {}:
+          } else if (calleeName == "CAT_sub"){
+            GEN[&i] = {&i}
+            KILL[&i] = VARAPPEARANCES[callInst->getArgOperand(0)];
+            KILL[&i].erase(&i);
+          }
+
+            errs()<<"INSTRUCTION: " << i << "\n";
+            errs() << "***************** GEN\n{\n";
+            for (std::set<Instruction*>::iterator it=GEN[&i].begin(); it!=GEN[&i].end(); ++it){
+              errs() << *(*it) << "\n"; 
+              }
+            errs() << "\n}\n**************************************\n***************** KILL\n{\n";
+            for (std::set<Instruction*>::iterator it=KILL[&i].begin(); it!=KILL[&i].end(); ++it){
+              errs() << *(*it) << "\n"; 
+              }
+            errs() << "\n}\n**************************************\n\n\n\n";
+
         }
       }
       
+
+      // for (std::map<Value*,std::set<Instruction*>>::iterator it=VARAPPEARANCES.begin(); it!=VARAPPEARANCES.end(); ++it){
+      //   errs() << "VARIABLE: " << (it->first) << "\n";
+      //   errs() << "Appearances: { ";
+      //   for (std::set<Instruction*>::iterator nico=it->second.begin(); nico!=it->second.end(); ++nico){
+      //      errs() << *(*nico) << ", "; 
+      //   }
+      //   errs() << "}\n\n";
+      // }
       return false;
 
     }
