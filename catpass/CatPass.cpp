@@ -5,6 +5,7 @@
 #include "llvm/Transforms/IPO/PassManagerBuilder.h"
 #include "llvm/IR/Module.h"
 #include "llvm/IR/Instructions.h"
+#include "llvm/IR/CFG.h"
 #include <set>
 #include <map>
 
@@ -41,11 +42,9 @@ namespace {
 
             for (auto &bb : F){
                 for (auto &i : bb){
-
                     if (!isa<CallInst>(i)){
                         continue;
                     }
-
                     CallInst *callInst = &cast<CallInst>(i);
                     Function *callee = callInst->getCalledFunction();
                     llvm::StringRef calleeName = callee->getName();
@@ -125,8 +124,51 @@ namespace {
                     errs() << "\n}\n**************************************\n\n\n\n";
                 }
             }
+
+            //H3 goes here
+
+            std::map<Instruction*,std::set<Instruction*>> OUT;
+            std::map<Instruction*,std::set<Instruction*>> IN;
+
+            for(std::map<Instruction*,std::set<Instruction*>>::iterator iter = GEN.begin(); iter != GEN.end(); ++iter) {
+                Instruction* k =  iter->first;
+                OUT[k] = {};
+            }
+
+            bool foundChange;
+            do {
+                foundChange = false;
+                for(std::map<Instruction*,std::set<Instruction*>>::iterator iter = GEN.begin(); iter != GEN.end(); ++iter){
+                    // Get current instruction to generate IN[currInst] and OUT[currInst]
+                    Instruction* currInst = iter->first;
+
+                    // Generate IN[currInst]
+                    for (BasicBlock *pred : llvm::predecessors(currInst->getParent())) {
+                        Instruction* terminator = pred->getTerminator();
+                        IN[currInst].insert(OUT[terminator].begin(), OUT[terminator].end());
+                    }
+
+                    // Generate OUT[currInst]
+                    std::set<Instruction*> TEMP = {};
+                    std::set_difference(IN[currInst].begin(),
+                                        IN[currInst].end(),
+                                        KILL[currInst].begin(),
+                                        KILL[currInst].end(),
+                                        std::inserter(TEMP, TEMP.end()));
+
+                    TEMP.insert(GEN[currInst].begin(), GEN[currInst].end());
+
+                    if (TEMP != OUT[currInst]){
+                        foundChange = true;
+                        OUT[currInst] = TEMP;
+                    }
+                }
+            } while(foundChange);
+
             return false;
         }
+
+
 
         // We don't modify the program, so we preserve all analyses.
         // The LLVM IR of functions isn't ready at this point
