@@ -139,18 +139,23 @@ namespace {
             bool foundChange;
             do {
                 foundChange = false;
-                for(std::map<Instruction*,std::set<Instruction*>>::iterator iter = GEN.begin(); iter != GEN.end(); ++iter){
-                    // Get current instruction to generate IN[currInst] and OUT[currInst]
-                    Instruction* currInst = iter->first;
+                for (auto &bb : F){
+                    bool first = true;
+                    Instruction* prevInst = NULL;
+                    for (auto &i : bb){
+                        Instruction* currInst= &i;
+                        if (first){
+                            for (BasicBlock *pred : llvm::predecessors(currInst->getParent())) {
+                                Instruction* terminator = pred->getTerminator();
+                                IN[currInst].insert(OUT[terminator].begin(), OUT[terminator].end());
+                            }
+                            first = false;
+                            prevInst = currInst;
+                        } else {
+                            IN[currInst].insert(OUT[prevInst].begin(), OUT[prevInst].end());
+                            prevInst = currInst;
+                        }
 
-                    // Generate IN[currInst]
-                    for (BasicBlock *pred : llvm::predecessors(currInst->getParent())) {
-                        Instruction* terminator = pred->getTerminator();
-                        IN[currInst].insert(OUT[terminator].begin(), OUT[terminator].end());
-                        errs() << "\n UPDATING IN TO a NEW SIZE OF " << IN[currInst].size();
-                    }
-
-                    // Generate OUT[currInst]
                     std::set<Instruction*> TEMP = {};
                     std::set_difference(IN[currInst].begin(),
                                         IN[currInst].end(),
@@ -160,36 +165,32 @@ namespace {
                     
 
                     TEMP.insert(GEN[currInst].begin(), GEN[currInst].end());
-                    
-                    errs() << "\n GEN SIZE IS " << GEN[currInst].size();
-                    errs() << "\n TEMP IS SIZE " << TEMP.size() << "\n";
-
 
                     if (TEMP != OUT[currInst]){
                         foundChange = true;
                         OUT[currInst] = TEMP;
-                        errs() << "\n UPDATING OUT TO a NEW SIZE OF " << OUT[currInst].size();
-
+                    }
+                        
                     }
                 }
             } while(foundChange);
 
-            // for (auto &bb : F){
-            //     for (auto &i : bb){
-            //             errs()<<"INSTRUCTION: " << i << "\n";
-            //             errs() << "***************** IN\n{";
-            //             errs() << "\nSize of IN set: " << IN[&i].size(); 
-            //             for (std::set<Instruction*>::iterator it=IN[&i].begin(); it!=IN[&i].end(); ++it){ 
-            //                 errs() << "\n " << *(*it);
-            //             }
-            //             errs() << "\n}\n**************************************\n***************** OUT\n{";
-            //             errs() << "\nSize of OUT set: " << OUT[&i].size(); 
-            //             for (std::set<Instruction*>::iterator it=OUT[&i].begin(); it!=OUT[&i].end(); ++it){
-            //                 errs() << "\n " << *(*it);
-            //             }
-            //             errs() << "\n}\n**************************************\n\n\n\n";
-            //     }
-            // }
+            for (auto &bb : F){
+                for (auto &i : bb){
+                        errs()<<"INSTRUCTION: " << i << "\n";
+                        errs() << "***************** IN\n{";
+                        // errs() << "\nSize of IN set: " << IN[&i].size(); 
+                        for (std::set<Instruction*>::iterator it=IN[&i].begin(); it!=IN[&i].end(); ++it){ 
+                            errs() << "\n " << *(*it);
+                        }
+                        errs() << "\n}\n**************************************\n***************** OUT\n{";
+                        // errs() << "\nSize of OUT set: " << OUT[&i].size(); 
+                        for (std::set<Instruction*>::iterator it=OUT[&i].begin(); it!=OUT[&i].end(); ++it){
+                            errs() << "\n " << *(*it);
+                        }
+                        errs() << "\n}\n**************************************\n\n\n\n";
+                }
+            }
 
 
             return false;
