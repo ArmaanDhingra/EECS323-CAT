@@ -6,6 +6,7 @@
 #include "llvm/IR/Module.h"
 #include "llvm/IR/Instructions.h"
 #include "llvm/IR/CFG.h"
+#include "llvm/IR/Constants.h"
 #include <set>
 #include <map>
 
@@ -48,7 +49,7 @@ namespace {
                     } else if (calleeName == "CAT_new"){
                         VARAPPEARANCES[callInst].insert(&i);
                     } else if (calleeName == "CAT_get"){
-                        getCount++;
+                        continue;
                     } else if (calleeName == "CAT_sub"){
                         VARAPPEARANCES[callInst->getArgOperand(0)].insert(&i);
                     }
@@ -157,14 +158,14 @@ namespace {
                     llvm::StringRef calleeName = callee->getName();
 
                     if (calleeName == "CAT_add"){
-                        todo
+                        continue; //TODO
                     } else if (calleeName == "CAT_set"){
-                        todo
+                        continue;
                     } else if (calleeName == "CAT_new"){
                         continue; // Nothing to do on CAT_new
                     } else if (calleeName == "CAT_get"){
                         auto var = callInst->getArgOperand(0);
-                        int64_t temp;
+                                    int64_t temp;
                         bool seenMatch = false;
                         bool takeTheTemp = true;
 
@@ -185,17 +186,20 @@ namespace {
                                 }
                                 
                                 break;
-                                continue //TODO
+                                continue; //TODO
                             } else if (calleeName == "CAT_set"){
 
                                 if (callInst->getArgOperand(0) != var) continue; // Instruction does not contain variable we are looking to replace
                                 auto val = callInst->getArgOperand(1);
 
-                                if !(isa<ConstantInt>(*val)){
+                                if (!isa<ConstantInt>(*val)){
                                     break; // Not a constant, cant swap, BYE
                                 }
                                 
-                                int64_t curr_temp = val->getSExtValue();
+                                int64_t curr_temp;
+                                ConstantInt* arg;
+                                arg = dyn_cast<ConstantInt>(val);
+                                curr_temp = arg->getSExtValue();
 
                                 if (seenMatch){
                                     if (curr_temp == temp){
@@ -213,11 +217,14 @@ namespace {
 
                                 auto val = callInst->getArgOperand(0);
 
-                                if !(isa<ConstantInt>(*val)){
+                                if (!isa<ConstantInt>(*val)){
                                     break; // Not a constant, cant swap, BYE
                                 }
                                 
-                                int64_t curr_temp = val->getSExtValue();
+                                int64_t curr_temp;
+                                ConstantInt* arg;
+                                arg = dyn_cast<ConstantInt>(val);
+                                curr_temp = arg->getSExtValue();
 
                                 if (seenMatch){
                                     if (curr_temp == temp){
@@ -231,7 +238,7 @@ namespace {
                                     temp = curr_temp;
                                 }
                             } else if (calleeName == "CAT_get"){
-                                continue //CAT_get doesnt modify anything so do nothing
+                                continue; //CAT_get doesnt modify anything so do nothing
                             } else if (calleeName == "CAT_sub"){
                                 if (callInst->getArgOperand(0) != var) continue; // Instruction does not contain variable we are looking to replace
 
@@ -241,18 +248,19 @@ namespace {
                                 }
                                 
                                 break;
-                                continue //TODO
+                                continue; //TODO
                             }
                         }
 
+                        // temp holds our constant
+                        // val holds the variable we wish to replace
+                        // i is the instruction that has that variable
 
-
-
-
-
-
+                        if (takeTheTemp && seenMatch){
+                            errs() << "REPLACE THE INSTRUCTION";
+                        }
                     } else if (calleeName == "CAT_sub"){
-                        todo
+                        continue; // TODO
                     }
                 }
             }
