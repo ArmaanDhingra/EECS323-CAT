@@ -28,14 +28,6 @@ namespace {
         // The LLVM IR of the input functions is ready and it can be analyzed and/or transformed
         bool runOnFunction (Function &F) override {
 
-
-            int addCount = 0;
-            int setCount = 0;
-            int newCount = 0;
-            int getCount = 0;
-            int subCount = 0;
-            std::string currKill = "";
-
             std::string funName = F.getName();
             errs()<<"START FUNCTION: " << funName << "\n";
             std::map<Value*,std::set<Instruction*>> VARAPPEARANCES;
@@ -73,17 +65,6 @@ namespace {
                     if (!isa<CallInst>(i)){
                         GEN[&i] = {};
                         KILL[&i] = {};
-
-                        // errs()<<"INSTRUCTION: " << i << "\n";
-                        // errs() << "***************** GEN\n{";
-                        // for (std::set<Instruction*>::iterator it=GEN[&i].begin(); it!=GEN[&i].end(); ++it){
-                        //     errs() << "\n " << *(*it);
-                        // }
-                        // errs() << "\n}\n**************************************\n***************** KILL\n{";
-                        // for (std::set<Instruction*>::iterator it=KILL[&i].begin(); it!=KILL[&i].end(); ++it){
-                        //     errs() << "\n " << *(*it);
-                        // }
-                        // errs() << "\n}\n**************************************\n\n\n\n";
                         continue;
                     }
 
@@ -111,17 +92,6 @@ namespace {
                         KILL[&i] = VARAPPEARANCES[callInst->getArgOperand(0)];
                         KILL[&i].erase(&i);
                     }
-
-                    // errs()<<"INSTRUCTION: " << i << "\n";
-                    // errs() << "***************** GEN\n{";
-                    // for (std::set<Instruction*>::iterator it=GEN[&i].begin(); it!=GEN[&i].end(); ++it){
-                    //     errs() << "\n " << *(*it);
-                    // }
-                    // errs() << "\n}\n**************************************\n***************** KILL\n{";
-                    // for (std::set<Instruction*>::iterator it=KILL[&i].begin(); it!=KILL[&i].end(); ++it){
-                    //     errs() << "\n " << *(*it);
-                    // }
-                    // errs() << "\n}\n**************************************\n\n\n\n";
                 }
             }
 
@@ -175,20 +145,115 @@ namespace {
                 }
             } while(foundChange);
 
+// Already have IN and OUT sets
+// H4
             for (auto &bb : F){
                 for (auto &i : bb){
-                        errs()<<"INSTRUCTION: " << i << "\n";
-                        errs() << "***************** IN\n{";
-                        // errs() << "\nSize of IN set: " << IN[&i].size(); 
+                    if (!isa<CallInst>(i)){
+                        continue;
+                    }
+                    CallInst *callInst = &cast<CallInst>(i);
+                    Function *callee = callInst->getCalledFunction();
+                    llvm::StringRef calleeName = callee->getName();
+
+                    if (calleeName == "CAT_add"){
+                        todo
+                    } else if (calleeName == "CAT_set"){
+                        todo
+                    } else if (calleeName == "CAT_new"){
+                        continue; // Nothing to do on CAT_new
+                    } else if (calleeName == "CAT_get"){
+                        auto var = callInst->getArgOperand(0);
+                        int64_t temp;
+                        bool seenMatch = false;
+                        bool takeTheTemp = true;
+
                         for (std::set<Instruction*>::iterator it=IN[&i].begin(); it!=IN[&i].end(); ++it){ 
-                            errs() << "\n " << *(*it);
+                            if (!isa<CallInst>(i)){
+                                continue;
+                            }
+                            CallInst *callInst = &cast<CallInst>(i);
+                            Function *callee = callInst->getCalledFunction();
+                            llvm::StringRef calleeName = callee->getName();
+
+                            if (calleeName == "CAT_add"){
+                                if (callInst->getArgOperand(0) != var) continue; // Instruction does not contain variable we are looking to replace
+
+                                if (seenMatch){
+                                    takeTheTemp = false;
+                                    break;
+                                }
+                                
+                                break;
+                                continue //TODO
+                            } else if (calleeName == "CAT_set"){
+
+                                if (callInst->getArgOperand(0) != var) continue; // Instruction does not contain variable we are looking to replace
+                                auto val = callInst->getArgOperand(1);
+
+                                if !(isa<ConstantInt>(*val)){
+                                    break; // Not a constant, cant swap, BYE
+                                }
+                                
+                                int64_t curr_temp = val->getSExtValue();
+
+                                if (seenMatch){
+                                    if (curr_temp == temp){
+                                        continue;
+                                    } else {
+                                        takeTheTemp = false;
+                                        break;
+                                    }
+                                } else {
+                                    seenMatch = true;
+                                    temp = curr_temp;
+                                }
+                            } else if (calleeName == "CAT_new"){
+                                if (callInst != var) continue;
+
+                                auto val = callInst->getArgOperand(0);
+
+                                if !(isa<ConstantInt>(*val)){
+                                    break; // Not a constant, cant swap, BYE
+                                }
+                                
+                                int64_t curr_temp = val->getSExtValue();
+
+                                if (seenMatch){
+                                    if (curr_temp == temp){
+                                        continue;
+                                    } else {
+                                        takeTheTemp = false;
+                                        break;
+                                    }
+                                } else {
+                                    seenMatch = true;
+                                    temp = curr_temp;
+                                }
+                            } else if (calleeName == "CAT_get"){
+                                continue //CAT_get doesnt modify anything so do nothing
+                            } else if (calleeName == "CAT_sub"){
+                                if (callInst->getArgOperand(0) != var) continue; // Instruction does not contain variable we are looking to replace
+
+                                if (seenMatch){
+                                    takeTheTemp = false;
+                                    break;
+                                }
+                                
+                                break;
+                                continue //TODO
+                            }
                         }
-                        errs() << "\n}\n**************************************\n***************** OUT\n{";
-                        // errs() << "\nSize of OUT set: " << OUT[&i].size(); 
-                        for (std::set<Instruction*>::iterator it=OUT[&i].begin(); it!=OUT[&i].end(); ++it){
-                            errs() << "\n " << *(*it);
-                        }
-                        errs() << "\n}\n**************************************\n\n\n\n";
+
+
+
+
+
+
+
+                    } else if (calleeName == "CAT_sub"){
+                        todo
+                    }
                 }
             }
 
