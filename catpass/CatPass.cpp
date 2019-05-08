@@ -7,6 +7,10 @@
 #include "llvm/IR/Instructions.h"
 #include "llvm/IR/CFG.h"
 #include "llvm/IR/Constants.h"
+#include "llvm/IR/BasicBlock.h"
+#include "llvm/Transforms/Utils/BasicBlockUtils.h"
+#include <vector>
+#include <tuple>
 #include <set>
 #include <map>
 
@@ -148,11 +152,22 @@ namespace {
 
 // Already have IN and OUT sets
 // H4
+            // typedef std::vector< std::tuple<BasicBlock, Instruction*, ConstantInt*> > mytuple;
+            // mytuple replace;
+
+            std::vector<BasicBlock*> replace_bb;
+            std::vector<Instruction*> replace_i;
+            std::vector<ConstantInt*> replace_ci;
+
+            ConstantInt* arg;
+
+
             for (auto &bb : F){
                 for (auto &i : bb){
                     if (!isa<CallInst>(i)){
                         continue;
                     }
+
                     CallInst *callInst = &cast<CallInst>(i);
                     Function *callee = callInst->getCalledFunction();
                     llvm::StringRef calleeName = callee->getName();
@@ -162,21 +177,26 @@ namespace {
                     } else if (calleeName == "CAT_set"){
                         continue;
                     } else if (calleeName == "CAT_new"){
+                        errs() << "Calling CAT_new on " << callInst << "\n\n";
                         continue; // Nothing to do on CAT_new
                     } else if (calleeName == "CAT_get"){
                         auto var = callInst->getArgOperand(0);
-                                    int64_t temp;
+                        errs() << "Calling CAT_get on var " << var << "\n\n";
+
+                        int64_t temp;
                         bool seenMatch = false;
                         bool takeTheTemp = true;
 
-                        for (std::set<Instruction*>::iterator it=IN[&i].begin(); it!=IN[&i].end(); ++it){ 
-                            if (!isa<CallInst>(i)){
+                        for (std::set<Instruction*>::iterator it=IN[&i].begin(); it!=IN[&i].end(); ++it){
+                            if (!isa<CallInst>(*(*it))){
                                 continue;
                             }
-                            CallInst *callInst = &cast<CallInst>(i);
+                            CallInst *callInst = &cast<CallInst>(*(*it));
                             Function *callee = callInst->getCalledFunction();
                             llvm::StringRef calleeName = callee->getName();
 
+                            errs() << calleeName << " are in in set\n\n";
+                            
                             if (calleeName == "CAT_add"){
                                 if (callInst->getArgOperand(0) != var) continue; // Instruction does not contain variable we are looking to replace
 
@@ -188,8 +208,9 @@ namespace {
                                 break;
                                 continue; //TODO
                             } else if (calleeName == "CAT_set"){
-
+                                // errs () << var << "\n\n" << callInst->getArgOperand(0) << "\n\n";
                                 if (callInst->getArgOperand(0) != var) continue; // Instruction does not contain variable we are looking to replace
+                                
                                 auto val = callInst->getArgOperand(1);
 
                                 if (!isa<ConstantInt>(*val)){
@@ -197,7 +218,6 @@ namespace {
                                 }
                                 
                                 int64_t curr_temp;
-                                ConstantInt* arg;
                                 arg = dyn_cast<ConstantInt>(val);
                                 curr_temp = arg->getSExtValue();
 
@@ -212,8 +232,10 @@ namespace {
                                     seenMatch = true;
                                     temp = curr_temp;
                                 }
+
                             } else if (calleeName == "CAT_new"){
                                 if (callInst != var) continue;
+                                errs() << "WE HAVE A MATCH \n\n";
 
                                 auto val = callInst->getArgOperand(0);
 
@@ -222,7 +244,6 @@ namespace {
                                 }
                                 
                                 int64_t curr_temp;
-                                ConstantInt* arg;
                                 arg = dyn_cast<ConstantInt>(val);
                                 curr_temp = arg->getSExtValue();
 
@@ -237,6 +258,7 @@ namespace {
                                     seenMatch = true;
                                     temp = curr_temp;
                                 }
+
                             } else if (calleeName == "CAT_get"){
                                 continue; //CAT_get doesnt modify anything so do nothing
                             } else if (calleeName == "CAT_sub"){
@@ -257,7 +279,15 @@ namespace {
                         // i is the instruction that has that variable
 
                         if (takeTheTemp && seenMatch){
-                            errs() << "REPLACE THE INSTRUCTION";
+                            errs() << "REPLACE THE INSTRUCTION\n\n";
+                            errs() << arg->getType() << "\n";
+                            ConstantInt *newArg = ConstantInt::get(arg->getType(), temp);
+                            // BasicBlock::iterator ii(i);
+                            // ReplaceInstWithValue(bb.getInstList(), ii, newArg);
+                            // replace.push_back(std::tuple<BasicBlock, Instruction*, ConstantInt*>(bb, i, newArg));
+                            replace_bb.push_back(&bb);
+                            replace_i.push_back(&i);
+                            replace_ci.push_back(newArg);
                         }
                     } else if (calleeName == "CAT_sub"){
                         continue; // TODO
@@ -265,6 +295,10 @@ namespace {
                 }
             }
 
+            for (int i=0; i<replace_bb.size(); i++){
+                BasicBlock::iterator ii(*(replace_i[i]));
+                ReplaceInstWithValue(replace_bb[i]->getInstList(), ii, replace_ci[i]);
+            }
 
             return false;
         }
