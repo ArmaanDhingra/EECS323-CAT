@@ -34,7 +34,7 @@ namespace {
         bool runOnFunction (Function &F) override {
 
             std::string funName = F.getName();
-            errs()<<"START FUNCTION: " << funName << "\n";
+            errs()<<"START FUNCTION: " << funName << "\n\n";
             std::map<Value*,std::set<Instruction*>> VARAPPEARANCES;
 
             for (auto &bb : F){
@@ -173,15 +173,18 @@ namespace {
                     llvm::StringRef calleeName = callee->getName();
 
                     if (calleeName == "CAT_add"){
+                        errs () << callInst->getArgOperand(0) << " -- modified by CAT_add \n\n";
                         continue; //TODO
-                    } else if (calleeName == "CAT_set"){
+                    }else if (calleeName == "CAT_sub"){
+                        errs () << callInst->getArgOperand(0) << " -- modified by CAT_sub \n\n";
+                    }else if (calleeName == "CAT_set"){
                         continue;
                     } else if (calleeName == "CAT_new"){
-                        errs() << "Calling CAT_new on " << callInst << "\n\n";
+                        errs() << callInst << " -- defined by CAT_new \n\n";
                         continue; // Nothing to do on CAT_new
                     } else if (calleeName == "CAT_get"){
                         auto var = callInst->getArgOperand(0);
-                        errs() << "Calling CAT_get on var " << var << "\n\n";
+                        errs() << var << " -- fetched by CAT_get\n\n";
 
                         int64_t temp;
                         bool seenMatch = false;
@@ -195,7 +198,7 @@ namespace {
                             Function *callee = callInst->getCalledFunction();
                             llvm::StringRef calleeName = callee->getName();
 
-                            errs() << calleeName << " are in in set\n\n";
+                            // errs() << calleeName << " are in in set\n\n";
                             
                             if (calleeName == "CAT_add"){
                                 if (callInst->getArgOperand(0) != var) continue; // Instruction does not contain variable we are looking to replace
@@ -235,7 +238,7 @@ namespace {
 
                             } else if (calleeName == "CAT_new"){
                                 if (callInst != var) continue;
-                                errs() << "WE HAVE A MATCH \n\n";
+                                // errs() << "WE HAVE A MATCH -- ";
 
                                 auto val = callInst->getArgOperand(0);
 
@@ -279,8 +282,14 @@ namespace {
                         // i is the instruction that has that variable
 
                         if (takeTheTemp && seenMatch){
-                            errs() << "REPLACE THE INSTRUCTION\n\n";
-                            errs() << arg->getType() << "\n";
+                            errs() << "WE HAVE A MATCH -- REPLACE THE INSTRUCTION\n";
+                            // errs() << arg->getType() << "\n\n";
+                            if (calleeName == "CAT_new"){
+                                errs() << &i << "\n\n";
+                            } else if (calleeName == "CAT_get"){
+                                errs () << callInst->getArgOperand(0) << " = " << temp << "\n\n";
+                            }
+
                             ConstantInt *newArg = ConstantInt::get(arg->getType(), temp);
                             // BasicBlock::iterator ii(i);
                             // ReplaceInstWithValue(bb.getInstList(), ii, newArg);
