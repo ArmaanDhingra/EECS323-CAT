@@ -201,14 +201,54 @@ namespace {
                         errs() << callInst << " -- defined by CAT_new \n\n";
                         continue; // Nothing to do on CAT_new
                     } else if (calleeName == "CAT_get"){
+                        std::set<Value*> varsToLookAt;
+                        std::set<int64_t> possibleTemps;
+
                         auto var = callInst->getArgOperand(0);
                         errs() << var << " -- fetched by CAT_get\n\n";
 
-                        int64_t temp;
-                        bool seenMatch = false;
-                        bool takeTheTemp = true;
 
-                        for (std::set<Instruction*>::iterator it=IN[&i].begin(); it!=IN[&i].end(); ++it){
+                        // PLAYING AROUND WITH PHI NODE THING
+
+                        if (auto phi = dyn_cast<PHINode>(var)){
+                            errs () << " And it is a phi node \n\n";
+                            unsigned numVals;
+                            numVals = phi->getNumIncomingValues();
+                            errs () << " It has " << numVals << " number of values \n";
+                            errs() << " and they are : \n";
+                            
+                            // We breakaway / stop looking for a replacement if at least one of the phiVals is an argument or is in the ignore list
+                            bool breakaway = false;
+
+                            for (int i = 0; i<numVals;i++){
+                                auto phiVal = phi->getIncomingValue(i);
+                                varsToLookAt.insert(phiVal);
+                                errs() << phiVal << "\n";
+                                if (isa<Argument>(phiVal)){
+                                    errs() << phiVal << " is an arg ! \n\n";
+                                    breakaway = true;
+                                    break;
+                                    continue;
+                                }
+                                if (ignoreList.find(phiVal) != ignoreList.end()){
+                                    breakaway = true;
+                                    break;
+                                } else {
+                                    varsToLookAt.insert(phiVal);
+                                }
+                            }
+                            if (breakaway) continue;
+                            errs () << "\n";
+                        } else {
+                            varsToLookAt.insert(var);
+                        }
+                        int64_t finaltemp;
+
+                        for (auto var : varsToLookAt){
+                            int64_t temp;
+                            bool seenMatch = false;
+                            bool takeTheTemp = true;
+                                                    for (std::set<Instruction*>::iterator it=IN[&i].begin(); it!=IN[&i].end(); ++it){
                             if (!isa<CallInst>(*(*it))){
                                 continue;
                             }
@@ -291,12 +331,20 @@ namespace {
                                 }
                             }
                         }
+                        if (takeTheTemp && seenMatch){
+                            finaltemp = temp;
+                            possibleTemps.insert(temp);
+                        }
+                        }
+                        
+
+
 
                         // temp holds our constant
                         // val holds the variable we wish to replace
                         // i is the instruction that has that variable
 
-                        if (takeTheTemp && seenMatch){
+                        if (possibleTemps.size() == 1){
                             errs() << "WE HAVE A MATCH -- REPLACE THE INSTRUCTION\n";
                             // errs() << arg->getType() << "\n\n";
                             if (calleeName == "CAT_new"){
@@ -307,10 +355,10 @@ namespace {
                                     errs() << "Did not replace because " << callInst->getArgOperand(0) <<" is in ignoreList\n\n";
                                     continue;
                                 }
-                                errs () << callInst->getArgOperand(0) << " = " << temp << "\n\n";
+                                errs () << callInst->getArgOperand(0) << " = " << finaltemp << "\n\n";
                             }
 
-                            ConstantInt *newArg = ConstantInt::get(arg->getType(), temp);
+                            ConstantInt *newArg = ConstantInt::get(arg->getType(), finaltemp);
                             // BasicBlock::iterator ii(i);
                             // ReplaceInstWithValue(bb.getInstList(), ii, newArg);
                             // replace.push_back(std::tuple<BasicBlock, Instruction*, ConstantInt*>(bb, i, newArg));
