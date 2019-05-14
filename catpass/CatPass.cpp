@@ -43,6 +43,12 @@ namespace {
             for (auto &bb : F){
                 for (auto &i : bb){
                     if (!isa<CallInst>(i)){
+                        // if we have a store instruction (test13) add its arg to ignore list too
+                        if (isa<StoreInst>(i)){
+                            StoreInst *storeInst = &cast<StoreInst>(i);
+                            Value* valueStored = storeInst->getValueOperand();
+                            ignoreList.insert(valueStored);
+                        }
                         continue;
                     }
                     CallInst *callInst = &cast<CallInst>(i);
@@ -63,9 +69,10 @@ namespace {
                         // If not a CAT_inst, add all its variables as ignore
                         unsigned numArgs = callInst->getNumOperands();
                         for (int i = 0; i < numArgs-1; i++){
+                            if (VARAPPEARANCES.find(callInst->getArgOperand(i)) != VARAPPEARANCES.end()){
                             ignoreList.insert(callInst->getArgOperand(i));
                             errs() << "Adding " << callInst->getArgOperand(i) << " to ignore list \n\n";
-
+                            }
                         }
                     }
                 }
