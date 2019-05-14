@@ -33,7 +33,10 @@ namespace {
         // The LLVM IR of the input functions is ready and it can be analyzed and/or transformed
         bool runOnFunction (Function &F) override {
 
+            std::set<Value*> ignoreList;
+
             std::string funName = F.getName();
+            errs () << " ________________________\n";
             errs()<<"START FUNCTION: " << funName << "\n\n";
             std::map<Value*,std::set<Instruction*>> VARAPPEARANCES;
 
@@ -56,6 +59,14 @@ namespace {
                         continue;
                     } else if (calleeName == "CAT_sub"){
                         VARAPPEARANCES[callInst->getArgOperand(0)].insert(&i);
+                    } else {
+                        // If not a CAT_inst, add all its variables as ignore
+                        unsigned numArgs = callInst->getNumOperands();
+                        for (int i = 0; i < numArgs-1; i++){
+                            ignoreList.insert(callInst->getArgOperand(i));
+                            errs() << "Adding " << callInst->getArgOperand(i) << " to ignore list \n\n";
+
+                        }
                     }
                 }
             }
@@ -271,9 +282,6 @@ namespace {
                                     takeTheTemp = false;
                                     break;
                                 }
-                                
-                                break;
-                                continue; //TODO
                             }
                         }
 
@@ -285,8 +293,13 @@ namespace {
                             errs() << "WE HAVE A MATCH -- REPLACE THE INSTRUCTION\n";
                             // errs() << arg->getType() << "\n\n";
                             if (calleeName == "CAT_new"){
+                                errs() << "\n Replacing a CAT_new -- should not be run \n\n" ;
                                 errs() << &i << "\n\n";
                             } else if (calleeName == "CAT_get"){
+                                if (ignoreList.find(callInst->getArgOperand(0)) != ignoreList.end()){
+                                    errs() << "Did not replace because " << callInst->getArgOperand(0) <<" is in ignoreList\n\n";
+                                    continue;
+                                }
                                 errs () << callInst->getArgOperand(0) << " = " << temp << "\n\n";
                             }
 
@@ -298,8 +311,6 @@ namespace {
                             replace_i.push_back(&i);
                             replace_ci.push_back(newArg);
                         }
-                    } else if (calleeName == "CAT_sub"){
-                        continue; // TODO
                     }
                 }
             }
