@@ -209,39 +209,35 @@ namespace {
 
 
                         // PLAYING AROUND WITH PHI NODE THING
+                        std::vector<Value*> varQueue;
+                        varQueue.push_back(var);
+                        bool breakaway = false;
 
-                        if (auto phi = dyn_cast<PHINode>(var)){
-                            errs () << " And it is a phi node \n\n";
-                            unsigned numVals;
-                            numVals = phi->getNumIncomingValues();
-                            errs () << " It has " << numVals << " number of values \n";
-                            errs() << " and they are : \n";
-                            
-                            // We breakaway / stop looking for a replacement if at least one of the phiVals is an argument or is in the ignore list
-                            bool breakaway = false;
-
-                            for (int i = 0; i<numVals;i++){
-                                auto phiVal = phi->getIncomingValue(i);
-                                varsToLookAt.insert(phiVal);
-                                errs() << phiVal << "\n";
-                                if (isa<Argument>(phiVal)){
-                                    errs() << phiVal << " is an arg ! \n\n";
-                                    breakaway = true;
-                                    break;
-                                    continue;
+                        // Handle case where PHI Nodes can contain other PHI nodes
+                        while(!varQueue.empty()){
+                            auto currVar = varQueue.back();
+                            varQueue.pop_back();
+                            if (auto phi = dyn_cast<PHINode>(currVar)){
+                                unsigned numVals;
+                                numVals = phi->getNumIncomingValues();
+                                for (int i = 0; i<numVals;i++){
+                                    auto phiVal = phi->getIncomingValue(i);
+                                    if (isa<Argument>(phiVal) || ignoreList.find(phiVal) != ignoreList.end()){
+                                        breakaway = true;
+                                        break;
+                                    }
+                                    else {
+                                        varQueue.push_back(phiVal);
+                                    }
                                 }
-                                if (ignoreList.find(phiVal) != ignoreList.end()){
-                                    breakaway = true;
-                                    break;
-                                } else {
-                                    varsToLookAt.insert(phiVal);
-                                }
+                                if (breakaway) break;
+                            } else {
+                                varsToLookAt.insert(currVar);
                             }
-                            if (breakaway) continue;
-                            errs () << "\n";
-                        } else {
-                            varsToLookAt.insert(var);
                         }
+
+                        if (breakaway) continue;
+
                         int64_t finaltemp;
 
                         for (auto var : varsToLookAt){
@@ -336,9 +332,6 @@ namespace {
                             possibleTemps.insert(temp);
                         }
                         }
-                        
-
-
 
                         // temp holds our constant
                         // val holds the variable we wish to replace
@@ -346,7 +339,6 @@ namespace {
 
                         if (possibleTemps.size() == 1){
                             errs() << "WE HAVE A MATCH -- REPLACE THE INSTRUCTION\n";
-                            // errs() << arg->getType() << "\n\n";
                             if (calleeName == "CAT_new"){
                                 errs() << "\n Replacing a CAT_new -- should not be run \n\n" ;
                                 errs() << &i << "\n\n";
@@ -359,9 +351,6 @@ namespace {
                             }
 
                             ConstantInt *newArg = ConstantInt::get(arg->getType(), finaltemp);
-                            // BasicBlock::iterator ii(i);
-                            // ReplaceInstWithValue(bb.getInstList(), ii, newArg);
-                            // replace.push_back(std::tuple<BasicBlock, Instruction*, ConstantInt*>(bb, i, newArg));
                             replace_bb.push_back(&bb);
                             replace_i.push_back(&i);
                             replace_ci.push_back(newArg);
