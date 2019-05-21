@@ -13,6 +13,7 @@
 #include <tuple>
 #include <set>
 #include <map>
+#include "llvm/Analysis/AliasAnalysis.h"
 
 using namespace llvm;
 
@@ -32,6 +33,129 @@ namespace {
         // This function is invoked once per function compiled
         // The LLVM IR of the input functions is ready and it can be analyzed and/or transformed
         bool runOnFunction (Function &F) override {
+             
+           std::set<Instruction*> MayAliasVars;
+	   std::set<Instruction*> MustAliasVars;
+
+           AliasAnalysis &aliasAnalysis = getAnalysis< AAResultsWrapperPass >().getAAResults();
+
+           vector< Instruction* > pointers;
+           vector< Instruction* > memInsts;
+           for (auto &B : F){
+             for (auto &I : B){
+             if (  I.getType()->isPointerTy()    &&
+                isa<CallInst>(&I)             ){
+            pointers.push_back(&I);
+            continue ;
+          }
+
+          if (  isa<LoadInst>(&I)   ||
+                isa<StoreInst>(&I)  ){
+            memInsts.push_back(&I);
+            continue ;
+          }
+        }
+      }
+
+      errs() << " ### Pointers\n";
+      for (auto &pointer : pointers) {
+        auto sizePointer = getPointedElementTypeSize(pointer);
+        errs() << "   Pointer: \"" << *pointer << "\"\n" ;
+        errs() << "     Size: " << sizePointer << " Bytes\n";
+
+        for (auto &pointer2 : pointers) {
+          if (pointer == pointer2) continue ;
+
+          auto sizePointer2 = getPointedElementTypeSize(pointer2);
+          errs() << "     Pointer2: \"" << *pointer2 << "\"\n" ;
+          errs() << "       Size: " << sizePointer2 << " Bytes\n";
+
+       :   switch (aliasAnalysis.alias(pointer, sizePointer, pointer2, sizePointer2)){
+            case NoAlias:
+              errs() << "     No alias\n" ;
+              break ;
+
+            case MayAlias:
+              errs() << "     May alias\n" ;
+              MayAliasVars.insert(pointer);
+	      MayAliasVars.insert(pointer2);
+              break ;
+
+            case PartialAlias:
+              errs() << "     Partial alias\n" ;
+              break ;
+
+            case MustAlias:
+              errs() << "     Must alias\n" ;
+              MustAliasVars.insert(pointer);
+              MustAliasVars.insert(pointer2);
+              break ;
+
+            default:
+              abort();
+          }
+        }
+      }
+
+      errs() << " ### Memory accesses\n";
+      for (auto &memInst : memInsts) {
+        errs() << "   Mem inst: \"" << *memInst << "\"\n" ;
+
+        for (auto &memInst2 : memInsts) {
+          if (memInst == memInst2) continue ;
+          errs() << "     Mem inst2: \"" << *memInst2 << "\"\n" ;
+
+          switch (aliasAnalysis.alias(MemoryLocation::get(memInst), MemoryLocation::get(memInst2))){
+            case NoAlias:
+              errs() << "     No alias\n" ;
+              break ;
+
+            case MayAlias:
+              errs() << "     May alias\n" ;
+              break ;
+
+            case PartialAlias:
+              errs() << "     Partial alias\n" ;
+              break ;
+
+            case MustAlias:
+              errs() << "     Must alias\n" ;
+              break ;
+
+            default:
+              abort();
+          }
+        }
+      }
+
+      errs() << " ### Mod/ref\n";
+      for (auto &memInst : memInsts) {
+        errs() << "   Mem inst: \"" << *memInst << "\"\n" ;
+
+        for (auto &pointer : pointers) {
+          auto sizePointer = getPointedElementTypeSize(pointer);
+          errs() << "   Pointer: \"" << *pointer << "\"\n" ;
+          errs() << "     Size: " << sizePointer << " Bytes\n";
+        
+          switch (aliasAnalysis.getModRefInfo(memInst, pointer, sizePointer)){
+            case ModRefInfo::NoModRef:
+              errs() << "     NoModRef\n";
+              break ;
+            case ModRefInfo::Mod:
+              errs() << "     Mod\n";
+              break ;
+            case ModRefInfo::Ref:
+              errs() << "     Ref\n";
+              break ;
+            case ModRefInfo::ModRef:
+              errs() << "     ModRef\n";
+              break ;
+            default:
+              abort();
+          }
+
+        }
+      } 
 
             std::set<Value*> ignoreList;
 
@@ -209,35 +333,39 @@ namespace {
 
 
                         // PLAYING AROUND WITH PHI NODE THING
-                        std::vector<Value*> varQueue;
-                        varQueue.push_back(var);
-                        bool breakaway = false;
 
-                        // Handle case where PHI Nodes can contain other PHI nodes
-                        while(!varQueue.empty()){
-                            auto currVar = varQueue.back();
-                            varQueue.pop_back();
-                            if (auto phi = dyn_cast<PHINode>(currVar)){
-                                unsigned numVals;
-                                numVals = phi->getNumIncomingValues();
-                                for (int i = 0; i<numVals;i++){
-                                    auto phiVal = phi->getIncomingValue(i);
-                                    if (isa<Argument>(phiVal) || ignoreList.find(phiVal) != ignoreList.end()){
-                                        breakaway = true;
-                                        break;
-                                    }
-                                    else {
-                                        varQueue.push_back(phiVal);
-                                    }
+                        if (auto phi = dyn_cast<PHINode>(var)){
+                            errs () << " And it is a phi node \n\n";
+                            unsigned numVals;
+                            numVals = phi->getNumIncomingValues();
+                            errs () << " It has " << numVals << " number of values \n";
+                            errs() << " and they are : \n";
+                            
+                            // We breakaway / stop looking for a replacement if at least one of the phiVals is an argument or is in the ignore list
+                            bool breakaway = false;
+
+                            for (int i = 0; i<numVals;i++){
+                                auto phiVal = phi->getIncomingValue(i);
+                                varsToLookAt.insert(phiVal);
+                                errs() << phiVal << "\n";
+                                if (isa<Argument>(phiVal)){
+                                    errs() << phiVal << " is an arg ! \n\n";
+                                    breakaway = true;
+                                    break;
+                                    continue;
                                 }
-                                if (breakaway) break;
-                            } else {
-                                varsToLookAt.insert(currVar);
+                                if (ignoreList.find(phiVal) != ignoreList.end()){
+                                    breakaway = true;
+                                    break;
+                                } else {
+                                    varsToLookAt.insert(phiVal);
+                                }
                             }
+                            if (breakaway) continue;
+                            errs () << "\n";
+                        } else {
+                            varsToLookAt.insert(var);
                         }
-
-                        if (breakaway) continue;
-
                         int64_t finaltemp;
 
                         for (auto var : varsToLookAt){
@@ -332,6 +460,9 @@ namespace {
                             possibleTemps.insert(temp);
                         }
                         }
+                        
+
+
 
                         // temp holds our constant
                         // val holds the variable we wish to replace
@@ -339,6 +470,7 @@ namespace {
 
                         if (possibleTemps.size() == 1){
                             errs() << "WE HAVE A MATCH -- REPLACE THE INSTRUCTION\n";
+                            // errs() << arg->getType() << "\n\n";
                             if (calleeName == "CAT_new"){
                                 errs() << "\n Replacing a CAT_new -- should not be run \n\n" ;
                                 errs() << &i << "\n\n";
@@ -351,6 +483,9 @@ namespace {
                             }
 
                             ConstantInt *newArg = ConstantInt::get(arg->getType(), finaltemp);
+                            // BasicBlock::iterator ii(i);
+                            // ReplaceInstWithValue(bb.getInstList(), ii, newArg);
+                            // replace.push_back(std::tuple<BasicBlock, Instruction*, ConstantInt*>(bb, i, newArg));
                             replace_bb.push_back(&bb);
                             replace_i.push_back(&i);
                             replace_ci.push_back(newArg);
@@ -368,6 +503,18 @@ namespace {
         }
 
 
+        uint64_t getPointedElementTypeSize (Instruction *pointer){
+        uint64_t size = 0;
+
+        if (auto pointerType = dyn_cast<PointerType>(pointer->getType())){
+          auto elementPointedType = pointerType->getElementType();
+          if (elementPointedType->isSized()){
+            size = currM->getDataLayout().getTypeStoreSize(elementPointedType);
+          }
+        }
+
+        return size;
+    }
 
         // We don't modify the program, so we preserve all analyses.
         // The LLVM IR of functions isn't ready at this point
