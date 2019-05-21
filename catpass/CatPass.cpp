@@ -16,17 +16,20 @@
 #include "llvm/Analysis/AliasAnalysis.h"
 
 using namespace llvm;
+using namespace std;
 
 namespace {
     struct CAT : public FunctionPass {
         static char ID;
-
+        Module *currM;
+        
         CAT() : FunctionPass(ID) {}
 
         // This function is invoked once at the initialization phase of the compiler
         // The LLVM IR of functions isn't ready at this point
         bool doInitialization (Module &M) override {
             //errs() << "Hello LLVM World at \"doInitialization\"\n" ;
+            currM = &M;
             return false;
         }
 
@@ -35,7 +38,8 @@ namespace {
         bool runOnFunction (Function &F) override {
              
            std::set<Instruction*> MayAliasVars;
-	   std::set<Instruction*> MustAliasVars;
+           std::set<Instruction*> MustAliasVars;
+           std::set<Instruction*> NoAliasVars;
 
            AliasAnalysis &aliasAnalysis = getAnalysis< AAResultsWrapperPass >().getAAResults();
 
@@ -70,15 +74,17 @@ namespace {
           errs() << "     Pointer2: \"" << *pointer2 << "\"\n" ;
           errs() << "       Size: " << sizePointer2 << " Bytes\n";
 
-       :   switch (aliasAnalysis.alias(pointer, sizePointer, pointer2, sizePointer2)){
+          switch (aliasAnalysis.alias(pointer, sizePointer, pointer2, sizePointer2)){
             case NoAlias:
               errs() << "     No alias\n" ;
+               NoAliasVars.insert(pointer);
+               NoAliasVars.insert(pointer2);
               break ;
 
             case MayAlias:
               errs() << "     May alias\n" ;
               MayAliasVars.insert(pointer);
-	      MayAliasVars.insert(pointer2);
+	          MayAliasVars.insert(pointer2);
               break ;
 
             case PartialAlias:
@@ -108,6 +114,8 @@ namespace {
           switch (aliasAnalysis.alias(MemoryLocation::get(memInst), MemoryLocation::get(memInst2))){
             case NoAlias:
               errs() << "     No alias\n" ;
+              NoAliasVars.insert(memInst);
+              NoAliasVars.insert(memInst2);
               break ;
 
             case MayAlias:
@@ -200,6 +208,10 @@ namespace {
                         }
                     }
                 }
+            }
+            
+            for (auto &nonAliasingVar : NoAliasVars){
+                ignoreList.erase(nonAliasingVar);
             }
 
             // Loop through again to generate GEN and KILL sets
@@ -520,6 +532,7 @@ namespace {
         // The LLVM IR of functions isn't ready at this point
         void getAnalysisUsage(AnalysisUsage &AU) const override {
             // errs() << "Hello LLVM World at \"getAnalysisUsage\"\n" ;
+            AU.addRequired< AAResultsWrapperPass >();
             AU.setPreservesAll();
         }
     };
