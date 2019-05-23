@@ -55,6 +55,10 @@ struct CAT : public FunctionPass
 
         vector<Instruction *> pointers;
         vector<Instruction *> memInsts;
+
+        std::map<Instruction *, std::set<Instruction *>> GEN;
+        std::map<Instruction *, std::set<Instruction *>> KILL;
+
         for (auto &B : F)
         {
             for (auto &I : B)
@@ -78,6 +82,9 @@ struct CAT : public FunctionPass
         errs() << " ### Pointers\n";
         for (auto &pointer : pointers)
         {
+            GEN[pointer] = {};
+            KILL[pointer] = {};
+
             auto ptrType = pointer->getType();
             auto sizePointer = F.getParent()->getDataLayout().getTypeStoreSize(ptrType);
             errs() << "   Pointer: \"" << *pointer << "\"\n";
@@ -101,6 +108,7 @@ struct CAT : public FunctionPass
 
                 case MayAlias:
                     errs() << "     May alias\n";
+                    GEN[pointer].insert(pointer2);
                     break;
 
                 case PartialAlias:
@@ -109,6 +117,8 @@ struct CAT : public FunctionPass
 
                 case MustAlias:
                     errs() << "     Must alias\n";
+                    GEN[pointer].insert(pointer2);
+                    KILL[pointer].insert(pointer2);
                     break;
 
                 default:
@@ -122,6 +132,9 @@ struct CAT : public FunctionPass
         errs() << " ### Memory accesses\n";
         for (auto &memInst : memInsts)
         {
+            GEN[memInst] = {};
+            KILL[memInst] = {};
+
             errs() << "   Mem inst: \"" << *memInst << "\"\n";
 
             for (auto &memInst2 : memInsts)
@@ -140,6 +153,7 @@ struct CAT : public FunctionPass
 
                 case MayAlias:
                     errs() << "     May alias\n";
+                    GEN[memInst].insert(memInst2);
                     break;
 
                 case PartialAlias:
@@ -148,6 +162,8 @@ struct CAT : public FunctionPass
 
                 case MustAlias:
                     errs() << "     Must alias\n";
+                    GEN[memInst].insert(memInst2);
+                    KILL[memInst].insert(memInst2);
                     break;
 
                 default:
@@ -180,12 +196,18 @@ struct CAT : public FunctionPass
                 {
                 case ModRefInfo::MustMod:
                     errs() << "     Must Mod\n";
+                    GEN[memInst].insert(pointer);
+                    KILL[memInst].insert(pointer);
+                    KILL[pointer].insert(memInst);
                     break;
                 case ModRefInfo::MustRef:
                     errs() << "     Must Ref\n";
                     break;
                 case ModRefInfo::MustModRef:
                     errs() << "     Must ModRef\n";
+                    GEN[memInst].insert(pointer);
+                    KILL[memInst].insert(pointer);
+                    KILL[pointer].insert(memInst);
                     break;
 
                 case ModRefInfo::NoModRef:
@@ -194,12 +216,18 @@ struct CAT : public FunctionPass
 
                 case ModRefInfo::Mod:
                     errs() << "     Mod\n";
+                    GEN[memInst].insert(pointer);
+                    KILL[memInst].insert(pointer);
+                    KILL[pointer].insert(memInst);
                     break;
                 case ModRefInfo::Ref:
                     errs() << "     Ref\n";
                     break;
                 case ModRefInfo::ModRef:
                     errs() << "     ModRef\n";
+                    GEN[memInst].insert(pointer);
+                    KILL[memInst].insert(pointer);
+                    KILL[pointer].insert(memInst);
                     break;
                 default:
                     errs() << " something else found \n";
@@ -220,7 +248,7 @@ struct CAT : public FunctionPass
                     {
                         StoreInst *storeInst = &cast<StoreInst>(i);
                         Value *valueStored = storeInst->getValueOperand();
-                        ignoreList.insert(valueStored);
+                        // ignoreList.insert(valueStored);
                     }
                     continue;
                 }
@@ -267,16 +295,14 @@ struct CAT : public FunctionPass
         // Loop through again to generate GEN and KILL sets
         // GEN[INSTRUCTION*]->set{INSTRUCTION*}
         // KILL[INSTRUCTION*]->set{INSTRUCTION*}
-        std::map<Instruction *, std::set<Instruction *>> GEN;
-        std::map<Instruction *, std::set<Instruction *>> KILL;
         for (auto &bb : F)
         {
             for (auto &i : bb)
             {
                 if (!isa<CallInst>(i))
                 {
-                    GEN[&i] = {};
-                    KILL[&i] = {};
+                    // GEN[&i] = {};
+                    // KILL[&i] = {};
                     continue;
                 }
 
