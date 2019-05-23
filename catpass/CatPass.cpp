@@ -212,6 +212,9 @@ struct CAT : public FunctionPass
 
                 case ModRefInfo::NoModRef:
                     errs() << "     NoModRef\n";
+                    KILL[memInst].insert(pointer);
+                    KILL[pointer].insert(memInst);
+
                     break;
 
                 case ModRefInfo::Mod:
@@ -222,6 +225,7 @@ struct CAT : public FunctionPass
                     break;
                 case ModRefInfo::Ref:
                     errs() << "     Ref\n";
+                    GEN[memInst].insert(pointer);
                     break;
                 case ModRefInfo::ModRef:
                     errs() << "     ModRef\n";
@@ -278,6 +282,11 @@ struct CAT : public FunctionPass
                 }
                 else
                 {
+                    if (aliasAnalysis.onlyReadsMemory(callInst))
+                    {
+                        continue;
+                    }
+
                     // If not a CAT_inst, add all its variables as ignore
                     unsigned numArgs = callInst->getNumOperands();
                     for (int i = 0; i < numArgs - 1; i++)
@@ -494,17 +503,32 @@ struct CAT : public FunctionPass
                     }
                     int64_t finaltemp;
 
+                    bool takeTheTemp = true;
+
                     for (auto var : varsToLookAt)
                     {
+                        errs() << "VAR VAR VAR \n\n";
+                        if (isa<CallInst>(*var))
+                        {
+                            errs() << "FOUND A CALL INST \n\n";
+                        }
+                        else
+                        {
+                            errs() << " WE IN HERE AT LEAST";
+                            takeTheTemp = false;
+                            break;
+                        }
+
                         int64_t temp;
                         bool seenMatch = false;
-                        bool takeTheTemp = true;
+                        errs() << "Looking at " << var << ": \n\n";
                         for (std::set<Instruction *>::iterator it = IN[&i].begin(); it != IN[&i].end(); ++it)
                         {
                             if (!isa<CallInst>(*(*it)))
                             {
                                 continue;
                             }
+
                             CallInst *callInst = &cast<CallInst>(*(*it));
                             Function *callee = callInst->getCalledFunction();
                             llvm::StringRef calleeName = callee->getName();
@@ -551,7 +575,6 @@ struct CAT : public FunctionPass
                                     else
                                     {
                                         takeTheTemp = false;
-                                        break;
                                     }
                                 }
                                 else
@@ -562,14 +585,22 @@ struct CAT : public FunctionPass
                             }
                             else if (calleeName == "CAT_new")
                             {
+                                errs() << *callInst << "\n";
+
                                 if (callInst != var)
+                                {
+                                    // errs() << *callInst << "\n";
+                                    errs() << "Call inst is not equal to the phinode var \n\n";
                                     continue;
+                                }
                                 // errs() << "WE HAVE A MATCH -- ";
 
                                 auto val = callInst->getArgOperand(0);
 
                                 if (!isa<ConstantInt>(*val))
                                 {
+                                    takeTheTemp = false;
+                                    errs() << "Val is not a constant int \n";
                                     break; // Not a constant, cant swap, BYE
                                 }
 
@@ -591,12 +622,14 @@ struct CAT : public FunctionPass
                                 }
                                 else
                                 {
+                                    errs() << "Taking the currtemp: " << curr_temp << "\n\n";
                                     seenMatch = true;
                                     temp = curr_temp;
                                 }
                             }
                             else if (calleeName == "CAT_get")
                             {
+
                                 continue; //CAT_get doesnt modify anything so do nothing
                             }
                             else if (calleeName == "CAT_sub")
@@ -622,7 +655,7 @@ struct CAT : public FunctionPass
                     // val holds the variable we wish to replace
                     // i is the instruction that has that variable
 
-                    if (possibleTemps.size() == 1)
+                    if (possibleTemps.size() == 1 && takeTheTemp)
                     {
                         errs() << "WE HAVE A MATCH -- REPLACE THE INSTRUCTION\n";
                         // errs() << arg->getType() << "\n\n";
