@@ -15,6 +15,7 @@
 #include <map>
 #include "llvm/Analysis/AliasAnalysis.h"
 #include "llvm/Analysis/AliasSetTracker.h"
+#include "llvm/Transforms/Utils/Cloning.h"
 
 using namespace llvm;
 using namespace std;
@@ -34,7 +35,58 @@ struct CAT : public FunctionPass
     {
         //errs() << "Hello LLVM World at \"doInitialization\"\n" ;
         currM = &M;
-        return false;
+
+        bool modified = transformFunctions(M);
+
+        return modified;
+    }
+
+    bool transformFunctions(Module &M)
+    {
+        bool modified = false;
+        for (auto &F : M)
+        {
+            modified |= transformFunction(M, F);
+        }
+
+        return modified;
+    }
+
+    bool transformFunction(Module &M, Function &F)
+    {
+        std::vector<Instruction *> toDelete;
+        errs() << "START" << F.getName() << "\n";
+
+        bool modified = false;
+        bool inlined = false;
+        for (auto &B : F)
+        {
+            for (auto &I : B)
+            {
+                if (auto call = dyn_cast<CallInst>(&I))
+                {
+                    auto *callee = call->getCalledFunction();
+                    if (callee == NULL || callee->empty())
+                        continue;
+                    InlineFunctionInfo IFI;
+                    inlined |= InlineFunction(call, IFI);
+                    if (inlined)
+                    {
+                        modified = true;
+                        break;
+                    }
+                    else
+                    {
+                        errs() << "    Failed to inline\n";
+                    }
+                }
+            }
+        }
+        if (inlined)
+        {
+            transformFunction(M, F);
+        }
+        return modified;
     }
 
     // This function is invoked once per function compiled
