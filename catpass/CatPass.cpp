@@ -36,9 +36,9 @@ struct CAT : public FunctionPass
         //errs() << "Hello LLVM World at \"doInitialization\"\n" ;
         currM = &M;
 
-        // bool modified = transformFunctions(M);
+        bool modified = transformFunctions(M);
 
-        return false;
+        return modified;
     }
 
     bool transformFunctions(Module &M)
