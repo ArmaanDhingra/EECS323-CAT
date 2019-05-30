@@ -68,6 +68,7 @@ struct CAT : public FunctionPass
                     auto *callee = call->getCalledFunction();
                     if (callee == NULL || callee->empty())
                         continue;
+                    errs() << "Inlining " << callee->getName() << " to " << F.getName() << "\n";
                     InlineFunctionInfo IFI;
                     inlined |= InlineFunction(call, IFI);
                     if (inlined)
@@ -139,7 +140,7 @@ struct CAT : public FunctionPass
 
             auto ptrType = pointer->getType();
             auto sizePointer = F.getParent()->getDataLayout().getTypeStoreSize(ptrType);
-            errs() << "   Pointer: \"" << *pointer << "\"\n";
+            errs() << "   Pointer: \"" << *pointer << "     |       " << pointer << "\"\n";
             errs() << "     Size: " << sizePointer << " Bytes\n";
 
             for (auto &pointer2 : pointers)
@@ -149,7 +150,7 @@ struct CAT : public FunctionPass
 
                 auto ptrType2 = pointer2->getType();
                 auto sizePointer2 = F.getParent()->getDataLayout().getTypeStoreSize(ptrType2);
-                errs() << "     Pointer2: \"" << *pointer2 << "\"\n";
+                errs() << "     Pointer2: \"" << *pointer2 << "     |       " << pointer2 << "\"\n";
                 errs() << "       Size: " << sizePointer2 << " Bytes\n";
 
                 switch (aliasAnalysis.alias(pointer, sizePointer, pointer2, sizePointer2))
@@ -187,13 +188,13 @@ struct CAT : public FunctionPass
             GEN[memInst] = {};
             KILL[memInst] = {};
 
-            errs() << "   Mem inst: \"" << *memInst << "\"\n";
+            errs() << "   Mem inst: \"" << *memInst << "    |      " << memInst << "\"\n";
 
             for (auto &memInst2 : memInsts)
             {
                 if (memInst == memInst2)
                     continue;
-                errs() << "     Mem inst2: \"" << *memInst2 << "\"\n";
+                errs() << "     Mem inst2: \"" << *memInst2 << "    |      " << memInst2 << "\"\n";
                 if (!(memInst && memInst2))
                     continue;
 
@@ -264,8 +265,8 @@ struct CAT : public FunctionPass
 
                 case ModRefInfo::NoModRef:
                     errs() << "     NoModRef\n";
-                    KILL[memInst].insert(pointer);
-                    KILL[pointer].insert(memInst);
+                    // KILL[memInst].insert(pointer);
+                    // KILL[pointer].insert(memInst);
 
                     break;
 
@@ -315,6 +316,7 @@ struct CAT : public FunctionPass
                 if (calleeName == "CAT_add")
                 {
                     VARAPPEARANCES[callInst->getArgOperand(0)].insert(&i);
+                    // errs() << "CAT ADD MEMORY IS " << callInst->getArgOperand(0) << "\n";
                 }
                 else if (calleeName == "CAT_set")
                 {
@@ -373,6 +375,7 @@ struct CAT : public FunctionPass
 
                 if (calleeName == "CAT_add")
                 {
+
                     GEN[&i] = {&i};
                     KILL[&i] = VARAPPEARANCES[callInst->getArgOperand(0)];
                     KILL[&i].erase(&i);
